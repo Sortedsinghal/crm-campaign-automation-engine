@@ -1,5 +1,10 @@
 # crm-campaign-automation-engine
 
+[![CI](https://github.com/Sortedsinghal/crm-campaign-automation-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Sortedsinghal/crm-campaign-automation-engine/actions/workflows/ci.yml)
+![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)
+![Jest](https://img.shields.io/badge/tested_with-Jest-99424f?logo=jest&logoColor=white)
+![ESLint](https://img.shields.io/badge/linting-ESLint-4B32C3?logo=eslint&logoColor=white)
+
 A Node.js service that polls Five9 (cloud contact center) for call log data every 2 minutes via SOAP, creates leads in Zoho CRM, and triggers a Zoho Campaigns automation that sends a follow-up email in the lead's language (English or Spanish).
 
 The service runs continuously on an EC2 instance and processes inbound call leads around the clock for a live company.
