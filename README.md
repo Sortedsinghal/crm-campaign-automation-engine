@@ -166,7 +166,7 @@ These numbers reflect the live production run of the automation:
 | **Manual CRM data entry** | 100% manual per lead | 0% manual | **↓ 100% elimination of manual entry** |
 | **Lead routing errors** | Prone to wrong template/language | Fully normalized at sync | **↓ 100% reduction in routing errors** |
 | **Duplicate leads in CRM** | No systematic dedup | Email-based dedup before every write | **↓ 100% duplicate prevention** |
-| **Leads processed automatically** | 0 | **178+ leads** (and growing 24/7) | **↑ Every inbound call lead handled with zero human effort** |
+| **Leads processed automatically** | 0 | **2000+ leads** (and growing 24/7) | **↑ Every inbound call lead handled with zero human effort** |
 | **Email personalization coverage** | 0% (generic template or none) | 100% (language-matched template) | **↑ 100% of leads receive correct language email** |
 
 ### System Reliability
