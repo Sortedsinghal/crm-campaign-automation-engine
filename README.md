@@ -191,7 +191,7 @@ These numbers reflect the live production run of the automation:
 ## Project Structure
 
 ```
-five9-zoho-sync/
+crm-campaign-automation-engine/
 ├── server.js            # Main service — polling loop + Express webhook
 ├── process.js           # One-shot bulk CSV import script
 ├── sync-state.json      # Persistent checkpoint (last synced timestamp)
@@ -298,15 +298,15 @@ The service runs as a persistent Node.js process on an EC2 instance. The recomme
 1. Launch EC2 instance with port `8080` open in the security group
 2. SSH in, install Node.js and git, clone this repo
 3. Upload `AdminWebService.wsdl` and `.env` to the server (these are not in the repo)
-4. Run `npm install` and start with PM2: `pm2 start server.js --name five9-zoho-sync`
+4. Run `npm install` and start with PM2: `pm2 start server.js --name crm-campaign-automation-engine`
 5. Run `pm2 save` + `pm2 startup` so the service restarts on reboot
 
 ### Updating
 
 ```bash
-cd ~/five9-zoho-sync
+cd ~/crm-campaign-automation-engine
 git pull origin main
-pm2 restart five9-zoho-sync
+pm2 restart crm-campaign-automation-engine
 ```
 
 > `sync-state.json` is written locally to disk — it persists between restarts and `git pull` updates on EC2. No checkpoint data is lost during normal deployments.
@@ -367,7 +367,7 @@ To force a re-sync from a specific point in time:
 
 ```bash
 echo '{"lastSyncTime":"2026-07-01T00:00:00.000Z"}' > sync-state.json
-pm2 restart five9-zoho-sync
+pm2 restart crm-campaign-automation-engine
 ```
 
 ---
@@ -493,6 +493,6 @@ This branching is possible because the sync service normalizes the language fiel
 **Viewing live logs on EC2**
 
 ```bash
-pm2 logs five9-zoho-sync              # live tail
-pm2 logs five9-zoho-sync --lines 200  # last 200 lines
+pm2 logs crm-campaign-automation-engine              # live tail
+pm2 logs crm-campaign-automation-engine --lines 200  # last 200 lines
 ```
