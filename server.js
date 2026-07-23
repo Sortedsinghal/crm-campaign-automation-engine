@@ -201,34 +201,20 @@ async function sendLeadToZoho({
         }
 
         const leadData = {
-            First_Name:
-                firstName || "",
-
-            Last_Name:
-                lastName || firstName || "Unknown",
-
-            Customer_Name:
-                `${firstName} ${lastName}`.trim() || "Unknown",
-
-            Email:
-                email,
-
-            Mobile:
-                phone || "",
-
-            [LANGUAGE_FIELD]:
-                language
+            Email: email
         };
 
-        if (actionStepId) {
-            leadData[ACTION_STEP_ID_FIELD] = actionStepId;
-        }
-        if (campaign) {
-            leadData[CAMPAIGN_FIELD] = campaign;
-        }
-        if (lastDisposition) {
-            leadData[LAST_DISPOSITION_FIELD] = lastDisposition;
-        }
+        if (firstName) leadData.First_Name = firstName;
+        if (lastName) leadData.Last_Name = lastName;
+
+        const computedCustomerName = `${firstName || ''} ${lastName || ''}`.trim();
+        if (computedCustomerName) leadData.Customer_Name = computedCustomerName;
+
+        if (phone) leadData.Mobile = phone;
+        if (language) leadData[LANGUAGE_FIELD] = language;
+        if (actionStepId) leadData[ACTION_STEP_ID_FIELD] = actionStepId;
+        if (campaign) leadData[CAMPAIGN_FIELD] = campaign;
+        if (lastDisposition) leadData[LAST_DISPOSITION_FIELD] = lastDisposition;
 
         let response;
 
@@ -264,6 +250,10 @@ async function sendLeadToZoho({
             );
 
         } else {
+            // Default fallbacks for required fields on brand new lead creation
+            leadData.Last_Name = leadData.Last_Name || firstName || "Unknown";
+            leadData.Customer_Name = leadData.Customer_Name || "Unknown";
+            leadData[LANGUAGE_FIELD] = leadData[LANGUAGE_FIELD] || "English";
             console.log(
                 `📤 Creating new lead in Zoho: ${email}`
             );
