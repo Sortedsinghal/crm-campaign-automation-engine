@@ -12,7 +12,6 @@ The service runs continuously on an EC2 instance and processes inbound call lead
 ---
 
 ## Table of Contents
-
 - [System Overview](#system-overview)
 - [Architecture](#architecture)
 - [Architectural Decisions](#architectural-decisions)
@@ -254,9 +253,12 @@ cp .env.example .env
 | `CLIENT_SECRET` | Zoho API client secret |
 | `API_DOMAIN` | Zoho API base URL — `https://www.zohoapis.com` |
 | `LANGUAGE_FIELD` | Zoho CRM API name of the Language field |
+| `ACTION_STEP_ID_FIELD` | Zoho CRM API name of the ActionStepID field (default `ActionStepID`) |
+| `CAMPAIGN_FIELD` | Zoho CRM API name of the Campaign field (default `Campaign`) |
+| `LAST_DISPOSITION_FIELD` | Zoho CRM API name of the Last Disposition field (default `Last_Disposition`) |
 | `FIVE9_USERNAME` | Five9 admin/API username |
 | `FIVE9_PASSWORD` | Five9 account password |
-| `FIVE9_REPORT_NAME` | Report name in Five9, must match exactly (case-sensitive) |
+| `FIVE9_REPORT_NAME` | Report name in Five9 (default `"All List Details - (ZOHO, ELLIOT - DO NOT USE)"`) |
 | `FIVE9_FOLDER_NAME` | Five9 folder containing the report |
 | `PORT` | HTTP port, defaults to `8080` |
 
@@ -390,6 +392,9 @@ pm2 restart crm-campaign-automation-engine
 | `last_name` | `Last_Name` |
 | `number1` | `Mobile` |
 | `Language` | Custom language field (normalized) |
+| `ActionStepID` | Custom ActionStepID field |
+| `CAMPAIGN` | Custom Campaign field |
+| `Last Disposition` / `LAST DISPOSITION` | Custom Last Disposition field |
 
 ---
 
@@ -414,6 +419,9 @@ Dedup check before every write: `GET /crm/v2/Leads/search?email=...`. If a recor
 | `Email` | Five9 `email` |
 | `Mobile` | Five9 `number1` |
 | `Language` | Normalized: `"English"` or `"Spanish"` |
+| `ActionStepID` | Five9 `ActionStepID` |
+| `Campaign` | Five9 `CAMPAIGN` |
+| `Last_Disposition` | Five9 `Last Disposition` |
 
 `trigger: ["workflow"]` is set on every write.
 

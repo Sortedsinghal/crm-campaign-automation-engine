@@ -1,5 +1,8 @@
-const { normalizeLanguage, app } = require("../server");
+const { normalizeLanguage, app, sendLeadToZoho } = require("../server");
 const request = require("supertest");
+const axios = require("axios");
+
+jest.mock("axios");
 
 // ─── normalizeLanguage ────────────────────────────────────────────────────────
 
@@ -81,5 +84,56 @@ describe("POST /lead — input validation", () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty("error", "Email required");
+  });
+});
+
+// ─── sendLeadToZoho ───────────────────────────────────────────────────────────
+
+describe("sendLeadToZoho() with report fields", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("includes ActionStepID, Campaign, and Last_Disposition in Zoho payload when present", async () => {
+    axios.post.mockResolvedValueOnce({
+      data: { access_token: "mock_token" }
+    });
+
+    axios.get.mockResolvedValueOnce({
+      data: { data: [] }
+    });
+
+    axios.post.mockResolvedValueOnce({
+      data: { data: [{ status: "success" }] }
+    });
+
+    await sendLeadToZoho({
+      email: "caller@example.com",
+      firstName: "Jane",
+      lastName: "Doe",
+      language: "Spanish",
+      phone: "1234567890",
+      actionStepId: "STEP_987",
+      campaign: "IB - LFECR",
+      lastDisposition: "Transferred"
+    });
+
+    const actionStepField = process.env.ACTION_STEP_ID_FIELD || "ActionStepID";
+    const campaignField = process.env.CAMPAIGN_FIELD || "Campaign";
+    const lastDispField = process.env.LAST_DISPOSITION_FIELD || "Last_Disposition";
+
+    expect(axios.post).toHaveBeenCalledTimes(2);
+    const leadCall = axios.post.mock.calls[1];
+    expect(leadCall[0]).toContain("/crm/v2/Leads");
+    expect(leadCall[1].data[0]).toMatchObject({
+      First_Name: "Jane",
+      Last_Name: "Doe",
+      Email: "caller@example.com",
+      Mobile: "1234567890",
+      Language: "Spanish",
+      [actionStepField]: "STEP_987",
+      [campaignField]: "IB - LFECR",
+      [lastDispField]: "Transferred"
+    });
   });
 });

@@ -13,9 +13,12 @@ const {
     CLIENT_SECRET,
     API_DOMAIN = "https://www.zohoapis.com",
     LANGUAGE_FIELD = "Language",
+    ACTION_STEP_ID_FIELD = "ActionStepID",
+    CAMPAIGN_FIELD = "Campaign",
+    LAST_DISPOSITION_FIELD = "Last_Disposition",
     FIVE9_USERNAME,
     FIVE9_PASSWORD,
-    FIVE9_REPORT_NAME,
+    FIVE9_REPORT_NAME = "All List Details - (ZOHO, ELLIOT - DO NOT USE)",
     FIVE9_FOLDER_NAME
 } = process.env;
 
@@ -127,37 +130,28 @@ app.post("/lead", async (req, res) => {
 // =======================
 const FIVE9_ENDPOINT = "https://api.five9.com/wsadmin/v2/AdminWebService";
 
-async function leadExistsInZoho(email) {
-
+async function getZohoLeadByEmail(email) {
     try {
-
         await ensureToken();
 
         const response = await axios.get(
-
             `${API_DOMAIN}/crm/v2/Leads/search?email=${encodeURIComponent(email)}`,
-
             {
                 headers: {
-                    Authorization:
-                        `Zoho-oauthtoken ${ACCESS_TOKEN}`
+                    Authorization: `Zoho-oauthtoken ${ACCESS_TOKEN}`
                 }
             }
         );
 
-        return (
-            response.data.data &&
-            response.data.data.length > 0
-        );
+        if (response.data.data && response.data.data.length > 0) {
+            return response.data.data[0];
+        }
+
+        return null;
 
     } catch (err) {
-
-        if (
-            err.response &&
-            err.response.status === 404
-        ) {
-
-            return false;
+        if (err.response && err.response.status === 404) {
+            return null;
         }
 
         console.log(
@@ -165,13 +159,17 @@ async function leadExistsInZoho(email) {
             err.response?.data || err.message
         );
 
-        return false;
+        return null;
     }
 }
 
+async function leadExistsInZoho(email) {
+    const lead = await getZohoLeadByEmail(email);
+    return lead !== null;
+}
 
 // =======================
-// 🚀 SEND TO ZOHO
+// 🚀 SEND TO ZOHO (CREATE OR UPDATE)
 // =======================
 
 async function sendLeadToZoho({
@@ -179,7 +177,10 @@ async function sendLeadToZoho({
     firstName,
     lastName,
     language,
-    phone
+    phone,
+    actionStepId,
+    campaign,
+    lastDisposition
 }) {
 
     try {
@@ -187,73 +188,104 @@ async function sendLeadToZoho({
         await ensureToken();
 
         // =======================
-        // 🔍 CHECK DUPLICATE
+        // 🔍 CHECK EXISTING LEAD
         // =======================
+        const existingLead = await getZohoLeadByEmail(email);
 
-        const exists =
-            await leadExistsInZoho(email);
+        const leadData = {
+            First_Name:
+                firstName || "",
 
-        if (exists) {
+            Last_Name:
+                lastName || firstName || "Unknown",
 
-            console.log(
-                `⏭️ Lead already exists in Zoho: ${email}`
-            );
+            Customer_Name:
+                `${firstName} ${lastName}`.trim() || "Unknown",
 
-            return;
+            Email:
+                email,
+
+            Mobile:
+                phone || "",
+
+            [LANGUAGE_FIELD]:
+                language
+        };
+
+        if (actionStepId) {
+            leadData[ACTION_STEP_ID_FIELD] = actionStepId;
+        }
+        if (campaign) {
+            leadData[CAMPAIGN_FIELD] = campaign;
+        }
+        if (lastDisposition) {
+            leadData[LAST_DISPOSITION_FIELD] = lastDisposition;
         }
 
-        console.log(
-            `📤 Sending to Zoho: ${email}`
-        );
+        let response;
 
-        const response = await axios.post(
+        if (existingLead && existingLead.id) {
+            console.log(
+                `🔄 Updating existing Zoho Lead (${existingLead.id}): ${email}`
+            );
 
-            `${API_DOMAIN}/crm/v2/Leads`,
-
-            {
-                data: [
-                    {
-                        First_Name:
-                            firstName || "",
-
-                        Last_Name:
-                            lastName || firstName || "Unknown",
-
-                        Customer_Name:
-                            `${firstName} ${lastName}`.trim() || "Unknown",
-
-                        Email:
-                            email,
-
-                        Mobile:
-                            phone || "",
-
-                        [LANGUAGE_FIELD]:
-                            language
-                    }
-                ],
-
-                trigger: [
-                    "workflow"
-                ]
-            },
-
-            {
-                headers: {
-                    Authorization:
-                        `Zoho-oauthtoken ${ACCESS_TOKEN}`,
-
-                    "Content-Type":
-                        "application/json"
+            response = await axios.put(
+                `${API_DOMAIN}/crm/v2/Leads`,
+                {
+                    data: [
+                        {
+                            id: existingLead.id,
+                            ...leadData
+                        }
+                    ],
+                    trigger: [
+                        "workflow"
+                    ]
                 },
+                {
+                    headers: {
+                        Authorization: `Zoho-oauthtoken ${ACCESS_TOKEN}`,
+                        "Content-Type": "application/json"
+                    },
+                    timeout: 15000
+                }
+            );
 
-                timeout: 15000
-            }
-        );
+            console.log(
+                `✅ Updated existing lead in Zoho: ${email}`
+            );
 
-        console.log(
-            `✅ Synced to Zoho: ${email}`
-        );
+        } else {
+            console.log(
+                `📤 Creating new lead in Zoho: ${email}`
+            );
+
+            response = await axios.post(
+                `${API_DOMAIN}/crm/v2/Leads`,
+                {
+                    data: [
+                        {
+                            duplicate_check_fields: ["Email"],
+                            ...leadData
+                        }
+                    ],
+                    trigger: [
+                        "workflow"
+                    ]
+                },
+                {
+                    headers: {
+                        Authorization: `Zoho-oauthtoken ${ACCESS_TOKEN}`,
+                        "Content-Type": "application/json"
+                    },
+                    timeout: 15000
+                }
+            );
+
+            console.log(
+                `✅ Created new lead in Zoho: ${email}`
+            );
+        }
 
         console.log(
             "📥 Zoho Response:",
@@ -377,191 +409,204 @@ async function fetchFive9Report() {
         // =======================
         // 🚀 DATE RANGE
         // =======================
-const startTime = lastSyncTime;
+        const startTime = lastSyncTime;
 
-const endTime =
-    new Date(
-        Date.now() - 5000
-    ).toISOString();
+        const endTime =
+            new Date(
+                Date.now() - 5000
+            ).toISOString();
 
-console.log("⏱️ Fetch Window:");
-console.log("START:", startTime);
-console.log("END:", endTime);
+        console.log("⏱️ Fetch Window:");
+        console.log("START:", startTime);
+        console.log("END:", endTime);
         // =======================
         // 🚀 RUN REPORT
         // =======================
-let runResult;
+        let runResult;
 
-for (let attempt = 1; attempt <= 3; attempt++) {
+        for (let attempt = 1; attempt <= 3; attempt++) {
 
-    try {
+            try {
 
-        [runResult] =
-            await client.runReportAsync({
+                [runResult] =
+                    await client.runReportAsync({
 
-                folderName:
-                    FIVE9_FOLDER_NAME,
+                        folderName:
+                            FIVE9_FOLDER_NAME,
 
-                reportName:
-                    FIVE9_REPORT_NAME,
+                        reportName:
+                            FIVE9_REPORT_NAME,
 
-                criteria: {
-                    time: {
-                        start: startTime,
-                        end: endTime
-                    }
+                        criteria: {
+                            time: {
+                                start: startTime,
+                                end: endTime
+                            }
+                        }
+                    });
+
+                break;
+
+            } catch (err) {
+
+                console.log(
+                    `⚠️ Five9 runReport retry ${attempt}/3`
+                );
+
+                console.log(
+                    err.code || err.message
+                );
+
+                if (attempt === 3) {
+                    throw err;
                 }
-            });
 
-        break;
-
-    } catch (err) {
-
-        console.log(
-            `⚠️ Five9 runReport retry ${attempt}/3`
-        );
-
-        console.log(
-            err.code || err.message
-        );
-
-        if (attempt === 3) {
-            throw err;
+                await new Promise(
+                    (r) => setTimeout(r, 5000)
+                );
+            }
         }
 
-        await new Promise(
-            (r) => setTimeout(r, 5000)
+
+        console.log("📥 Run Report Response:", runResult);
+
+        const identifier = runResult.return;
+
+        if (!identifier) {
+            throw new Error("No report identifier returned");
+        }
+
+        console.log("🆔 Report ID:", identifier);
+
+        // =======================
+        // ⏳ WAIT FOR REPORT
+        // =======================
+        let running = true;
+
+        while (running) {
+
+            const [statusResult] =
+                await client.isReportRunningAsync({
+                    identifier
+                });
+
+            running = statusResult.return;
+
+            if (running) {
+                console.log("⏳ Waiting for report...");
+                await new Promise((r) => setTimeout(r, 2000));
+            }
+        }
+
+        // =======================
+        // 📊 GET REPORT RESULT CSV
+        // =======================
+
+        console.log("⏳ Waiting 10s before downloading CSV...");
+
+        await new Promise((r) =>
+            setTimeout(r, 10000)
         );
-    }
-}
 
+        const [result] =
+            await client.getReportResultCsvAsync({
+                identifier
+            });
 
-console.log("📥 Run Report Response:", runResult);
+        console.log("📥 Report Result:", result);
 
-const identifier = runResult.return;
+        const csvData = result.return || "";
+        console.log(
+            "📄 CSV Length:",
+            csvData.length
+        );
 
-if (!identifier) {
-    throw new Error("No report identifier returned");
-}
-
-console.log("🆔 Report ID:", identifier);
-
-// =======================
-// ⏳ WAIT FOR REPORT
-// =======================
-let running = true;
-
-while (running) {
-
-    const [statusResult] =
-        await client.isReportRunningAsync({
-            identifier
+        const parsed = parse(csvData, {
+            columns: true,
+            skip_empty_lines: true,
+            relax_quotes: true
         });
 
-    running = statusResult.return;
+        console.log(`📊 Parsed CSV rows: ${parsed.length}`);
 
-    if (running) {
-        console.log("⏳ Waiting for report...");
-        await new Promise((r) => setTimeout(r, 2000));
-    }
-}
+        const records = [];
 
-// =======================
-// 📊 GET REPORT RESULT CSV
-// =======================
+        for (const row of parsed) {
 
-console.log("⏳ Waiting 10s before downloading CSV...");
+            const email =
+                (row.email || "").trim();
 
-await new Promise((r) =>
-    setTimeout(r, 10000)
-);
+            if (
+                !email ||
+                email === "-" ||
+                !email.includes("@")
+            ) {
+                continue;
+            }
 
-const [result] =
-    await client.getReportResultCsvAsync({
-        identifier
-    });
+            const firstName = (row.first_name || "").trim();
+            const lastName = (row.last_name || "").trim();
+            const phone = (row.number1 || "").trim();
 
-console.log("📥 Report Result:", result);
+            const language =
+                (row.Language || "English").trim();
 
-const csvData = result.return || "";
-console.log(
-    "📄 CSV Length:",
-    csvData.length
-);
+            const actionStepId =
+                (row.ActionStepID || row.actionstepid || row.Action_Step_ID || "").trim();
+            const campaign =
+                (row.CAMPAIGN || row.campaign || row.Campaign || "").trim();
+            const lastDisposition =
+                (row["Last Disposition"] || row["LAST DISPOSITION"] || row.DISPOSITION || row.disposition || "").trim();
 
-const parsed = parse(csvData, {
-    columns: true,
-    skip_empty_lines: true,
-    relax_quotes: true
-});
+            console.log(
+                `✅ Found lead: ${email} | ${firstName} ${lastName} | ${phone} | ${language} | ActionStepID: ${actionStepId} | Campaign: ${campaign} | Last Disposition: ${lastDisposition}`
+            );
 
-console.log(`📊 Parsed CSV rows: ${parsed.length}`);
+            // =======================
+            // 🚀 SEND TO ZOHO
+            // =======================
+            await sendLeadToZoho({
+                email,
+                firstName,
+                lastName,
+                language,
+                phone,
+                actionStepId,
+                campaign,
+                lastDisposition
+            });
 
-const records = [];
+            records.push({
+                email,
+                firstName,
+                lastName,
+                phone,
+                language,
+                actionStepId,
+                campaign,
+                lastDisposition
+            });
+        }
 
-for (const row of parsed) {
+        console.log(
+            `✅ Valid lead rows: ${records.length}`
+        );
 
-    const email =
-        (row.email || "").trim();
+        lastSyncTime = endTime;
+        saveSyncState();
+        console.log(
+            "✅ Updated sync checkpoint:",
+            lastSyncTime
+        );
 
-    if (
-        !email ||
-        email === "-" ||
-        !email.includes("@")
-    ) {
-        continue;
-    }
+        if (records.length === 0) {
 
-    const firstName = (row.first_name || "").trim();
-    const lastName  = (row.last_name  || "").trim();
-    const phone     = (row.number1    || "").trim();
+            console.log(
+                "⚠️ No rows returned"
+            );
+        }
 
-    const language =
-        (row.Language || "English").trim();
-
-    console.log(
-        `✅ Found lead: ${email} | ${firstName} ${lastName} | ${phone} | ${language}`
-    );
-
-    // =======================
-    // 🚀 SEND TO ZOHO
-    // =======================
-    await sendLeadToZoho({
-        email,
-        firstName,
-        lastName,
-        language,
-        phone
-    });
-
-    records.push({
-        email,
-        firstName,
-        lastName,
-        phone,
-        language
-    });
-}
-
-console.log(
-    `✅ Valid lead rows: ${records.length}`
-);
-
-lastSyncTime = endTime;
-saveSyncState();
-console.log(
-    "✅ Updated sync checkpoint:",
-    lastSyncTime
-);
-
-if (records.length === 0) {
-
-    console.log(
-        "⚠️ No rows returned"
-    );
-}
-
-return records;
+        return records;
 
 
 
@@ -577,55 +622,73 @@ return records;
     }
 }
 // =======================
-// =======================
-// 🔁 POLLING LOOP
+// 🔁 SCHEDULING LOGIC
 // =======================
 let isPolling = false;
 
-setInterval(async () => {
-
+async function runSyncCycle() {
     if (isPolling) {
-
-        console.log(
-            "⚠️ Previous polling still running"
-        );
-
+        console.log("⚠️ Previous polling still running");
         return;
     }
 
     isPolling = true;
 
     try {
-
-        console.log("🔄 Fetching Five9...");
-
-        const records =
-            await fetchFive9Report();
+        console.log("🔄 Running scheduled Five9 sync...");
+        const records = await fetchFive9Report();
 
         if (records.length > 0) {
-
-            console.log(
-                `✅ ${records.length} leads synced`
-            );
-
+            console.log(`✅ ${records.length} leads synced`);
         } else {
-
             console.log("ℹ️ No records");
         }
 
     } catch (err) {
-
-        console.log(
-            "❌ Polling Error:",
-            err.message
-        );
+        console.log("❌ Polling Error:", err.message);
 
     } finally {
-
         isPolling = false;
     }
+}
 
-}, 2 * 60 * 1000);
+function scheduleNextRun() {
+    const pollMinutes = process.env.POLL_INTERVAL_MINUTES;
+
+    if (pollMinutes && !isNaN(parseInt(pollMinutes, 10))) {
+        const ms = parseInt(pollMinutes, 10) * 60 * 1000;
+        console.log(`⏱️ Scheduled next poll in ${pollMinutes} minutes`);
+        setTimeout(async () => {
+            await runSyncCycle();
+            scheduleNextRun();
+        }, ms);
+        return;
+    }
+
+    const targetHourPST = parseInt(process.env.SCHEDULE_HOUR_PST || "21", 10);
+    const targetMinPST  = parseInt(process.env.SCHEDULE_MIN_PST || "5", 10);
+
+    const now = new Date();
+    const pstString = now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
+    const pstDate = new Date(pstString);
+
+    const nextRunPST = new Date(pstDate);
+    nextRunPST.setHours(targetHourPST, targetMinPST, 0, 0);
+
+    if (pstDate >= nextRunPST) {
+        nextRunPST.setDate(nextRunPST.getDate() + 1);
+    }
+
+    const msUntilNextRun = nextRunPST.getTime() - pstDate.getTime();
+    const hoursUntil = (msUntilNextRun / (1000 * 60 * 60)).toFixed(2);
+
+    console.log(`📅 Scheduled next daily sync at 9:05 PM PST (in ~${hoursUntil} hours)`);
+
+    setTimeout(async () => {
+        await runSyncCycle();
+        scheduleNextRun();
+    }, msUntilNextRun);
+}
 
 // =======================
 // 🚀 START SERVER
@@ -636,7 +699,8 @@ if (require.main === module) {
     loadSyncState();
     app.listen(PORT, "0.0.0.0", () => {
         console.log(`🚀 API running on port ${PORT}`);
+        scheduleNextRun();
     });
 }
 
-module.exports = { app, normalizeLanguage };
+module.exports = { app, normalizeLanguage, sendLeadToZoho, runSyncCycle };

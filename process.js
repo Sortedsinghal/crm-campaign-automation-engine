@@ -11,6 +11,9 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const API_DOMAIN = process.env.API_DOMAIN || "https://www.zohoapis.com";
 const LANGUAGE_FIELD = process.env.LANGUAGE_FIELD || "Language";
 const CUSTOMER_NAME_FIELD = "Customer_Name";
+const ACTION_STEP_ID_FIELD = process.env.ACTION_STEP_ID_FIELD || "ActionStepID";
+const CAMPAIGN_FIELD = process.env.CAMPAIGN_FIELD || "Campaign";
+const LAST_DISPOSITION_FIELD = process.env.LAST_DISPOSITION_FIELD || "Last_Disposition";
 
 // 🔄 Normalize Language
 function normalizeLanguage(lang) {
@@ -63,25 +66,36 @@ async function sendToCRM(row, ACCESS_TOKEN) {
 
   const language = normalizeLanguage(rawLang);
 
+  const actionStepId =
+    (row["ActionStepID"] || row["actionstepid"] || row["Action_Step_ID"] || "").trim();
+  const campaign =
+    (row["CAMPAIGN"] || row["campaign"] || row["Campaign"] || "").trim();
+  const lastDisposition =
+    (row["Last Disposition"] || row["LAST DISPOSITION"] || row["DISPOSITION"] || row["disposition"] || "").trim();
+
   if (!email) {
     console.log("⚠️ Skipping (no email)");
     return;
   }
 
-  console.log(`➡️ ${email} | ${language}`);
+  console.log(`➡️ ${email} | ${language} | ActionStepID: ${actionStepId} | Campaign: ${campaign} | Last Disposition: ${lastDisposition}`);
 
   try {
+    const leadData = {
+      Last_Name: name,                       // Required field
+      [CUSTOMER_NAME_FIELD]: name,           // ✅ Full name stored here
+      Email: email,
+      [LANGUAGE_FIELD]: language
+    };
+
+    if (actionStepId) leadData[ACTION_STEP_ID_FIELD] = actionStepId;
+    if (campaign) leadData[CAMPAIGN_FIELD] = campaign;
+    if (lastDisposition) leadData[LAST_DISPOSITION_FIELD] = lastDisposition;
+
     await axios.post(
       `${API_DOMAIN}/crm/v2/Leads`,
       {
-        data: [
-          {
-            Last_Name: name,                       // Required field
-            [CUSTOMER_NAME_FIELD]: name,           // ✅ Full name stored here
-            Email: email,
-            [LANGUAGE_FIELD]: language
-          }
-        ],
+        data: [leadData],
         duplicate_check_fields: ["Email"],        // Prevent duplicates
         trigger: ["workflow"]                     // Trigger Zoho workflows
       },
